@@ -13,9 +13,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Optional
 
+import pathlib
+
 from bson import json_util
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 from pymongo import ASCENDING, DESCENDING, MongoClient, ReturnDocument
 from pymongo.collection import Collection
@@ -88,6 +92,23 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@app.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def dashboard_view():
+    static_file = pathlib.Path(__file__).parent / "static" / "index.html"
+    if static_file.exists():
+        return HTMLResponse(content=static_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>HROne Attendance & Analytics</h1><p><a href='/docs'>Swagger API Docs</a></p>")
 
 
 # --------------------------------------------------------------------------- #

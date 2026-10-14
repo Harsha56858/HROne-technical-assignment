@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HROne Attendance & Analytics Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .tab-active {
+      border-bottom: 2px solid #4f46e5;
+      color: #4f46e5;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans text-slate-800 antialiased">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-16">
+        <div class="flex items-center gap-3">
+          <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-md">
+            <i data-lucide="clock" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">
+              HROne Attendance & Analytics
+            </h1>
+            <p class="text-xs text-slate-500">FastAPI & MongoDB 7.0 Engine</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <!-- Backend Status Badge -->
+          <div id="backend-status" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+            <span class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+            <span>Checking backend...</span>
+          </div>
+
+          <!-- Live Clock -->
+          <div class="hidden sm:flex flex-col text-right font-mono text-xs text-slate-600 border-l border-slate-200 pl-4">
+            <span id="live-ist-time" class="font-bold text-slate-900">--:--:-- IST</span>
+            <span id="live-date" class="text-slate-400">YYYY-MM-DD</span>
+          </div>
+
+          <!-- Swagger API Docs Link -->
+          <a href="/docs" target="_blank" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition">
+            <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+            <span>Swagger API</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-8 -mb-px overflow-x-auto text-sm" id="nav-tabs">
+        <button onclick="switchTab('analytics')" class="tab-btn tab-active py-3 px-1 text-slate-600 hover:text-indigo-600 flex items-center gap-2" data-tab="analytics">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>Analytics & Leaderboard</span>
+        </button>
+        <button onclick="switchTab('punch')" class="tab-btn py-3 px-1 text-slate-600 hover:text-indigo-600 flex items-center gap-2" data-tab="punch">
+          <i data-lucide="fingerprint" class="w-4 h-4"></i>
+          <span>Punch In / Out</span>
+        </button>
+        <button onclick="switchTab('attendance')" class="tab-btn py-3 px-1 text-slate-600 hover:text-indigo-600 flex items-center gap-2" data-tab="attendance">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+          <span>Attendance Records</span>
+        </button>
+        <button onclick="switchTab('employees')" class="tab-btn py-3 px-1 text-slate-600 hover:text-indigo-600 flex items-center gap-2" data-tab="employees">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span>Employees</span>
+        </button>
+        <button onclick="switchTab('explain')" class="tab-btn py-3 px-1 text-slate-600 hover:text-indigo-600 flex items-center gap-2" data-tab="explain">
+          <i data-lucide="cpu" class="w-4 h-4"></i>
+          <span>MongoDB Query Explain</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform transition-all duration-300 translate-y-24 opacity-0 pointer-events-none">
+    <div id="toast-body" class="bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm">
+      <span id="toast-icon"></span>
+      <span id="toast-msg"></span>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ================================================================= -->
+    <!-- TAB 1: ANALYTICS & LEADERBOARD                                    -->
+    <!-- ================================================================= -->
+    <div id="tab-analytics" class="tab-content space-y-8">
+      
+      <!-- Top Filters -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Analytics Overview</h2>
+          <p class="text-xs text-slate-500">Aggregated real-time metrics across departments</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="text-xs font-semibold text-slate-600 uppercase">Month:</label>
+          <input type="month" id="analytics-month" value="2026-07" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" onchange="loadAnalytics()">
+          <button onclick="loadAnalytics()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-1.5">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Department Summary Cards -->
+      <div>
+        <h3 class="text-md font-semibold text-slate-800 mb-4 flex items-center gap-2">
+          <i data-lucide="building-2" class="w-4 h-4 text-indigo-600"></i>
+          <span>Department Performance Summary</span>
+        </h3>
+        <div id="dept-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="col-span-full text-center py-8 text-slate-400">Loading department summaries...</div>
+        </div>
+      </div>
+
+      <!-- Two-Column Section: Leaderboard + Trend -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <!-- Late Leaderboard -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+          <div class="flex justify-between items-center mb-4">
+            <div>
+              <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="trophy" class="w-4 h-4 text-amber-500"></i>
+                <span>Late-Comers Leaderboard</span>
+              </h3>
+              <p class="text-xs text-slate-500">Competition ranking with tie support (1, 2, 2, 4)</p>
+            </div>
+            <select id="leaderboard-dept" onchange="loadLeaderboard()" class="border border-slate-300 rounded-lg px-2.5 py-1 text-xs">
+              <option value="">All Departments</option>
+              <option value="Engineering">Engineering</option>
+              <option value="Sales">Sales</option>
+              <option value="Support">Support</option>
+            </select>
+          </div>
+
+          <div class="overflow-x-auto flex-1">
+            <table class="w-full text-left text-sm">
+              <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold border-b">
+                <tr>
+                  <th class="py-2.5 px-3">Rank</th>
+                  <th class="py-2.5 px-3">Employee</th>
+                  <th class="py-2.5 px-3">Dept</th>
+                  <th class="py-2.5 px-3 text-right">Late Minutes</th>
+                  <th class="py-2.5 px-3 text-right">Late Days</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-rows" class="divide-y divide-slate-100">
+                <tr><td colspan="5" class="text-center py-6 text-slate-400">Loading leaderboard...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Department Daily Trend Chart -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+          <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+            <div>
+              <h3 class="font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="trending-up" class="w-4 h-4 text-emerald-500"></i>
+                <span>Department Attendance Trend</span>
+              </h3>
+              <p class="text-xs text-slate-500">Daily presence rate & 7-day moving average</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="trend-dept" onchange="loadTrend()" class="border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-medium">
+                <option value="Engineering">Engineering</option>
+                <option value="Sales">Sales</option>
+                <option value="Support">Support</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Trend Date Range Selectors -->
+          <div class="flex items-center gap-3 mb-4 text-xs bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <span>From:</span>
+            <input type="date" id="trend-from" value="2026-07-06" class="border rounded px-2 py-1" onchange="loadTrend()">
+            <span>To:</span>
+            <input type="date" id="trend-to" value="2026-07-15" class="border rounded px-2 py-1" onchange="loadTrend()">
+            <button onclick="loadTrend()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1 rounded font-medium">Apply</button>
+          </div>
+
+          <div class="relative flex-1 min-h-[260px]">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 2: PUNCH IN / OUT (INTERACTIVE CLOCK)                          -->
+    <!-- ================================================================= -->
+    <div id="tab-punch" class="tab-content hidden max-w-2xl mx-auto space-y-6">
+      
+      <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200 text-center relative overflow-hidden">
+        <div class="absolute -right-12 -top-12 w-40 h-40 bg-indigo-50 rounded-full pointer-events-none"></div>
+        <div class="inline-flex p-3 bg-indigo-50 text-indigo-600 rounded-2xl mb-4">
+          <i data-lucide="timer" class="w-8 h-8"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900">Biometric Punch Station</h2>
+        <p class="text-sm text-slate-500 mt-1">Record attendance punch events with automatic business rule calculations</p>
+
+        <!-- Current Live Time Display -->
+        <div class="my-6 bg-slate-900 text-emerald-400 p-6 rounded-2xl font-mono text-3xl font-bold tracking-widest shadow-inner inline-block w-full max-w-sm">
+          <div id="punch-live-clock">--:--:--</div>
+          <div class="text-xs text-slate-400 tracking-normal font-sans font-normal mt-1">IST (UTC+05:30) • Precision Truncation</div>
+        </div>
+
+        <!-- Punch Form -->
+        <div class="space-y-4 text-left max-w-md mx-auto">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Select Employee</label>
+            <select id="punch-emp-code" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="">Loading employees...</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 mb-1">Presence Status</label>
+            <select id="punch-status" class="w-full border border-slate-300 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white">
+              <option value="PRESENT">PRESENT (In Office)</option>
+              <option value="WFH">WFH (Work From Home)</option>
+              <option value="ON_DUTY">ON_DUTY (Official Duty)</option>
+            </select>
+          </div>
+
+          <!-- Custom Timestamp Toggle -->
+          <div class="bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-medium text-slate-700">Custom Timestamp (Optional)</label>
+              <input type="checkbox" id="punch-custom-toggle" onchange="toggleCustomTime()" class="rounded text-indigo-600">
+            </div>
+            <div id="punch-custom-container" class="hidden mt-2">
+              <input type="datetime-local" id="punch-custom-datetime" class="w-full border border-slate-300 rounded-lg p-2 text-xs">
+              <span class="text-[10px] text-slate-500">Leaves blank to punch at current server time.</span>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="grid grid-cols-2 gap-4 pt-2">
+            <button onclick="handlePunch('in')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+              <i data-lucide="log-in" class="w-4 h-4"></i>
+              <span>Punch IN</span>
+            </button>
+            <button onclick="handlePunch('out')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+              <span>Punch OUT</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Result Box -->
+        <div id="punch-result" class="hidden mt-6 p-4 rounded-2xl text-left text-xs bg-slate-50 border border-slate-200"></div>
+
+      </div>
+
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 3: ATTENDANCE RECORDS & AUDIT TRAIL                           -->
+    <!-- ================================================================= -->
+    <div id="tab-attendance" class="tab-content hidden space-y-6">
+      
+      <!-- Filters -->
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex flex-wrap items-center gap-3">
+          <input type="text" id="att-filter-emp" placeholder="Employee Code (e.g. EMP0001)" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <input type="date" id="att-filter-from" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs">
+          <span class="text-xs text-slate-400">to</span>
+          <input type="date" id="att-filter-to" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs">
+          <select id="att-filter-status" class="border border-slate-300 rounded-lg px-3 py-1.5 text-xs">
+            <option value="">All Statuses</option>
+            <option value="PRESENT">PRESENT</option>
+            <option value="WFH">WFH</option>
+            <option value="ON_DUTY">ON_DUTY</option>
+            <option value="ABSENT">ABSENT</option>
+            <option value="LEAVE">LEAVE</option>
+          </select>
+          <button onclick="loadAttendance(1)" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition">
+            Filter
+          </button>
+        </div>
+        <div class="text-xs text-slate-500" id="att-pagination-info">Showing 0 records</div>
+      </div>
+
+      <!-- Attendance Table -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-500 text-xs uppercase font-semibold border-b">
+              <tr>
+                <th class="py-3 px-4">Employee</th>
+                <th class="py-3 px-4">Date</th>
+                <th class="py-3 px-4">Status</th>
+                <th class="py-3 px-4">Punch In (IST)</th>
+                <th class="py-3 px-4">Punch Out (IST)</th>
+                <th class="py-3 px-4 text-center">Work Hours</th>
+                <th class="py-3 px-4 text-center">Late (m)</th>
+                <th class="py-3 px-4 text-center">OT (m)</th>
+                <th class="py-3 px-4 text-center">Half Day</th>
+                <th class="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-table-body" class="divide-y divide-slate-100">
+              <tr><td colspan="10" class="text-center py-8 text-slate-400">Loading attendance logs...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 4: EMPLOYEE DIRECTORY                                         -->
+    <!-- ================================================================= -->
+    <div id="tab-employees" class="tab-content hidden space-y-6">
+      
+      <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex justify-between items-center">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900">Employee Directory</h2>
+          <p class="text-xs text-slate-500">Manage customer personnel and shift schedules</p>
+        </div>
+        <button onclick="openAddEmployeeModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl shadow-md transition flex items-center gap-1.5">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span>Add Employee</span>
+        </button>
+      </div>
+
+      <!-- Employees Grid -->
+      <div id="employees-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="col-span-full text-center py-8 text-slate-400">Loading employees...</div>
+      </div>
+
+    </div>
+
+    <!-- ================================================================= -->
+    <!-- TAB 5: ADMIN QUERY EXPLAIN (MONGODB PLANNER)                       -->
+    <!-- ================================================================= -->
+    <div id="tab-explain" class="tab-content hidden space-y-6">
+      
+      <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <i data-lucide="activity" class="w-5 h-5 text-indigo-600"></i>
+              <span>MongoDB Execution Plan Inspector (`executionStats`)</span>
+            </h2>
+            <p class="text-xs text-slate-500">Verifies index utilization (IXSCAN) and ensures no COLLSCAN on 100k records</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+          <div>
+            <label class="block font-semibold mb-1">Target Endpoint:</label>
+            <select id="explain-endpoint-select" class="border border-slate-300 rounded px-3 py-1.5 bg-white font-medium">
+              <option value="department_summary">department_summary</option>
+              <option value="late_leaderboard">late_leaderboard</option>
+              <option value="employee_monthly">employee_monthly</option>
+              <option value="attendance_list">attendance_list</option>
+              <option value="department_trend">department_trend</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Month / Date:</label>
+            <input type="month" id="explain-month" value="2026-07" class="border rounded px-3 py-1 bg-white">
+          </div>
+          <button onclick="runExplainQuery()" class="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2 rounded-lg transition flex items-center gap-1.5">
+            <i data-lucide="play" class="w-3.5 h-3.5"></i>
+            <span>Run Explain</span>
+          </button>
+        </div>
+
+        <div id="explain-results-container" class="mt-6 hidden space-y-4">
+          <div class="flex items-center gap-4">
+            <span id="explain-index-badge" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+              Index Scan Confirmed (IXSCAN)
+            </span>
+            <span class="text-xs text-slate-500" id="explain-collection-info">Collection: employees</span>
+          </div>
+          <pre id="explain-json" class="bg-slate-900 text-emerald-400 p-4 rounded-xl text-xs font-mono max-h-96 overflow-y-auto"></pre>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================================================================= -->
+  <!-- MODALS                                                            -->
+  <!-- ================================================================= -->
+
+  <!-- Regularize Modal -->
+  <div id="modal-regularize" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-regularize')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <h3 class="text-lg font-bold text-slate-900 mb-1">Regularize Attendance</h3>
+      <p class="text-xs text-slate-500 mb-4" id="modal-reg-subtitle">Correct punch times with mandatory audit trail</p>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">Status</label>
+          <select id="modal-reg-status" class="w-full border rounded-lg p-2 bg-white">
+            <option value="PRESENT">PRESENT</option>
+            <option value="WFH">WFH</option>
+            <option value="ON_DUTY">ON_DUTY</option>
+            <option value="ABSENT">ABSENT</option>
+            <option value="LEAVE">LEAVE</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">Punch In Time</label>
+          <input type="datetime-local" id="modal-reg-punchin" class="w-full border rounded-lg p-2">
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">Punch Out Time</label>
+          <input type="datetime-local" id="modal-reg-punchout" class="w-full border rounded-lg p-2">
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">Regularized By (Admin Name / Email)</label>
+          <input type="text" id="modal-reg-by" value="hr.admin" class="w-full border rounded-lg p-2">
+        </div>
+
+        <div>
+          <label class="block font-semibold mb-1">Reason for Regularization</label>
+          <input type="text" id="modal-reg-reason" placeholder="e.g. Biometric reader hardware error" class="w-full border rounded-lg p-2">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeModal('modal-regularize')" class="px-4 py-2 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button onclick="submitRegularization()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-md">Submit Correction</button>
+      </div>
+
+      <!-- History Trail Box -->
+      <div id="modal-reg-history-box" class="mt-6 border-t pt-4 text-xs">
+        <h4 class="font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+          <i data-lucide="history" class="w-3.5 h-3.5 text-slate-500"></i>
+          <span>Previous Audit Trail</span>
+        </h4>
+        <div id="modal-reg-history-items" class="space-y-2 max-h-36 overflow-y-auto"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Employee Modal -->
+  <div id="modal-add-employee" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-add-employee')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+      <h3 class="text-lg font-bold text-slate-900 mb-4">Register New Employee</h3>
+
+      <div class="space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold mb-1">Employee Code (EMP + 4-6 digits)</label>
+          <input type="text" id="emp-create-code" placeholder="EMP0010" class="w-full border rounded-lg p-2 font-mono">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Full Name</label>
+          <input type="text" id="emp-create-name" placeholder="John Doe" class="w-full border rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Email</label>
+          <input type="email" id="emp-create-email" placeholder="john@example.com" class="w-full border rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Department</label>
+          <input type="text" id="emp-create-dept" placeholder="Engineering" class="w-full border rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold mb-1">Shift Start</label>
+            <input type="time" id="emp-create-start" value="09:30" class="w-full border rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold mb-1">Shift End</label>
+            <input type="time" id="emp-create-end" value="18:30" class="w-full border rounded-lg p-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold mb-1">Joined Date</label>
+          <input type="date" id="emp-create-joined" value="2026-07-01" class="w-full border rounded-lg p-2">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeModal('modal-add-employee')" class="px-4 py-2 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50">Cancel</button>
+        <button onclick="submitNewEmployee()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-semibold hover:bg-indigo-700 shadow-md">Create Employee</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript Application Logic -->
+  <script>
+    const API_BASE = window.location.origin.includes('http') ? window.location.origin : 'http://127.0.0.1:8000';
+    let cachedEmployees = [];
+    let trendChartInstance = null;
+    let selectedRecordForReg = null;
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      startClocks();
+      checkBackendHealth();
+      loadEmployees();
+      loadAnalytics();
+      loadLeaderboard();
+      loadTrend();
+    });
+
+    // -------------------------------------------------------------
+    // Live Clocks
+    // -------------------------------------------------------------
+    function startClocks() {
+      setInterval(() => {
+        const now = new Date();
+        const istString = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+        const dateString = now.toISOString().split('T')[0];
+        document.getElementById('live-ist-time').innerText = istString + ' IST';
+        document.getElementById('live-date').innerText = dateString;
+        const punchClock = document.getElementById('punch-live-clock');
+        if (punchClock) punchClock.innerText = istString;
+      }, 1000);
+    }
+
+    // -------------------------------------------------------------
+    // Backend Health Check
+    // -------------------------------------------------------------
+    async function checkBackendHealth() {
+      const badge = document.getElementById('backend-status');
+      try {
+        const res = await fetch(`${API_BASE}/health`);
+        if (res.ok) {
+          badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200';
+          badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span><span>Backend: Online (MongoDB 7.0)</span>';
+        } else {
+          throw new Error();
+        }
+      } catch (err) {
+        badge.className = 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200';
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span><span>Backend: Offline</span>';
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Tab Switching
+    // -------------------------------------------------------------
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('tab-active'));
+      
+      const targetTab = document.getElementById(`tab-${tabId}`);
+      if (targetTab) targetTab.classList.remove('hidden');
+
+      const targetBtn = document.querySelector(`button[data-tab="${tabId}"]`);
+      if (targetBtn) targetBtn.classList.add('tab-active');
+
+      if (tabId === 'attendance') loadAttendance(1);
+      if (tabId === 'employees') renderEmployeesGrid();
+      if (tabId === 'analytics') { loadAnalytics(); loadLeaderboard(); loadTrend(); }
+      lucide.createIcons();
+    }
+
+    // -------------------------------------------------------------
+    // Notifications (Toast)
+    // -------------------------------------------------------------
+    function showToast(msg, isSuccess = true) {
+      const toast = document.getElementById('toast');
+      const body = document.getElementById('toast-body');
+      const msgEl = document.getElementById('toast-msg');
+      const icon = document.getElementById('toast-icon');
+
+      msgEl.innerText = msg;
+      if (isSuccess) {
+        body.className = 'bg-emerald-800 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm border border-emerald-700';
+        icon.innerHTML = '<i data-lucide="check-circle" class="w-4 h-4 text-emerald-300"></i>';
+      } else {
+        body.className = 'bg-rose-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 text-sm border border-rose-700';
+        icon.innerHTML = '<i data-lucide="alert-circle" class="w-4 h-4 text-rose-300"></i>';
+      }
+      lucide.createIcons();
+
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      setTimeout(() => {
+        toast.classList.add('translate-y-24', 'opacity-0');
+      }, 3500);
+    }
+
+    // -------------------------------------------------------------
+    // Employees Handling
+    // -------------------------------------------------------------
+    async function loadEmployees() {
+      try {
+        const res = await fetch(`${API_BASE}/employees?page=1&page_size=100`);
+        const data = await res.json();
+        cachedEmployees = data.items || [];
+        populateEmployeeDropdowns();
+        renderEmployeesGrid();
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function populateEmployeeDropdowns() {
+      const punchSelect = document.getElementById('punch-emp-code');
+      if (!punchSelect) return;
+      punchSelect.innerHTML = cachedEmployees.map(e => `
+        <option value="${e.emp_code}">${e.emp_code} - ${e.name} (${e.department})</option>
+      `).join('');
+    }
+
+    function renderEmployeesGrid() {
+      const container = document.getElementById('employees-grid');
+      if (!container) return;
+      if (!cachedEmployees.length) {
+        container.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400">No employees registered.</div>';
+        return;
+      }
+      container.innerHTML = cachedEmployees.map(e => `
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:shadow-md transition">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <span class="inline-block px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded font-mono text-xs font-semibold">${e.emp_code}</span>
+              <h4 class="font-bold text-slate-900 text-base mt-1">${e.name}</h4>
+              <p class="text-xs text-slate-500">${e.email}</p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">${e.department}</span>
+          </div>
+          <div class="border-t border-slate-100 pt-3 text-xs text-slate-600 flex justify-between">
+            <span>Shift: <strong>${e.shift_start} - ${e.shift_end}</strong></span>
+            <span>Joined: <strong>${e.joined_on}</strong></span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openAddEmployeeModal() {
+      document.getElementById('modal-add-employee').classList.remove('hidden');
+    }
+
+    async function submitNewEmployee() {
+      const code = document.getElementById('emp-create-code').value.trim();
+      const name = document.getElementById('emp-create-name').value.trim();
+      const email = document.getElementById('emp-create-email').value.trim();
+      const dept = document.getElementById('emp-create-dept').value.trim();
+      const start = document.getElementById('emp-create-start').value;
+      const end = document.getElementById('emp-create-end').value;
+      const joined = document.getElementById('emp-create-joined').value;
+
+      try {
+        const res = await fetch(`${API_BASE}/employees`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            emp_code: code,
+            name: name,
+            email: email,
+            department: dept,
+            shift_start: start,
+            shift_end: end,
+            joined_on: joined
+          })
+        });
+        const json = await res.json();
+        if (res.ok) {
+          showToast(`Employee ${code} created successfully!`, true);
+          closeModal('modal-add-employee');
+          loadEmployees();
+        } else {
+          showToast(json.detail || 'Validation error', false);
+        }
+      } catch (err) {
+        showToast('Failed to create employee', false);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Punch Station Logic
+    // -------------------------------------------------------------
+    function toggleCustomTime() {
+      const chk = document.getElementById('punch-custom-toggle').checked;
+      const container = document.getElementById('punch-custom-container');
+      if (chk) {
+        container.classList.remove('hidden');
+      } else {
+        container.classList.add('hidden');
+      }
+    }
+
+    async function handlePunch(type) {
+      const emp_code = document.getElementById('punch-emp-code').value;
+      const status = document.getElementById('punch-status').value;
+      const isCustom = document.getElementById('punch-custom-toggle').checked;
+      const customVal = document.getElementById('punch-custom-datetime').value;
+
+      if (!emp_code) {
+        showToast('Please select an employee', false);
+        return;
+      }
+
+      let punched_at = null;
+      if (isCustom && customVal) {
+        punched_at = new Date(customVal).getTime();
+      }
+
+      const endpoint = type === 'in' ? '/attendance/punch-in' : '/attendance/punch-out';
+      const body = { emp_code: emp_code };
+      if (punched_at) body.punched_at = punched_at;
+      if (type === 'in') body.status = status;
+
+      const resultBox = document.getElementById('punch-result');
+      resultBox.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          showToast(`Successfully punched ${type.toUpperCase()} for ${emp_code}!`, true);
+          resultBox.className = 'mt-6 p-4 rounded-2xl text-left text-xs bg-emerald-50 border border-emerald-200 text-emerald-900 block space-y-1.5';
+          resultBox.innerHTML = `
+            <div class="font-bold flex items-center gap-1.5 text-sm text-emerald-800">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Punch ${type.toUpperCase()} Recorded</span>
+            </div>
+            <div>Date: <strong>${data.date}</strong> | Status: <strong>${data.status}</strong></div>
+            <div>Late: <strong>${data.late_minutes} min</strong> | Overtime: <strong>${data.overtime_minutes || 0} min</strong> | Work Hours: <strong>${data.work_hours !== null ? data.work_hours : 'In-Progress'}</strong></div>
+            ${data.half_day ? '<div class="text-amber-700 font-semibold">⚠️ Half Day (< 4.5 hours)</div>' : ''}
+          `;
+          lucide.createIcons();
+        } else {
+          showToast(data.detail || 'Punch failed', false);
+          resultBox.className = 'mt-6 p-4 rounded-2xl text-left text-xs bg-rose-50 border border-rose-200 text-rose-900 block';
+          resultBox.innerHTML = `<strong>Error:</strong> ${data.detail || 'Could not record punch'}`;
+        }
+      } catch (err) {
+        showToast('Network error while processing punch', false);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Attendance Records & Regularization
+    // -------------------------------------------------------------
+    async function loadAttendance(page = 1) {
+      const emp = document.getElementById('att-filter-emp').value.trim();
+      const from = document.getElementById('att-filter-from').value;
+      const to = document.getElementById('att-filter-to').value;
+      const status = document.getElementById('att-filter-status').value;
+
+      let q = `page=${page}&page_size=50`;
+      if (emp) q += `&emp_code=${emp}`;
+      if (from) q += `&date_from=${from}`;
+      if (to) q += `&date_to=${to}`;
+      if (status) q += `&status=${status}`;
+
+      const tbody = document.getElementById('attendance-table-body');
+      tbody.innerHTML = '<tr><td colspan="10" class="text-center py-6 text-slate-400">Loading records...</td></tr>';
+
+      try {
+        const res = await fetch(`${API_BASE}/attendance?${q}`);
+        const data = await res.json();
+        const items = data.items || [];
+        document.getElementById('att-pagination-info').innerText = `Total ${data.total} records found (Page ${data.page})`;
+
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-slate-400">No attendance records found matching filters.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = items.map(r => {
+          const inStr = r.punch_in ? new Date(r.punch_in).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '-';
+          const outStr = r.punch_out ? new Date(r.punch_out).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false }) : '-';
+          const statusColors = {
+            'PRESENT': 'bg-emerald-100 text-emerald-800',
+            'WFH': 'bg-sky-100 text-sky-800',
+            'ON_DUTY': 'bg-indigo-100 text-indigo-800',
+            'ABSENT': 'bg-rose-100 text-rose-800',
+            'LEAVE': 'bg-amber-100 text-amber-800'
+          };
+
+          return `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="py-3 px-4 font-mono font-medium text-slate-900">${r.emp_code}</td>
+              <td class="py-3 px-4 text-slate-600 font-mono text-xs">${r.date}</td>
+              <td class="py-3 px-4">
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[r.status] || 'bg-slate-100'}">${r.status}</span>
+              </td>
+              <td class="py-3 px-4 font-mono text-xs">${inStr}</td>
+              <td class="py-3 px-4 font-mono text-xs">${outStr}</td>
+              <td class="py-3 px-4 text-center font-semibold text-slate-700">${r.work_hours !== null ? r.work_hours : '-'}</td>
+              <td class="py-3 px-4 text-center ${r.late_minutes > 0 ? 'text-rose-600 font-bold' : 'text-slate-400'}">${r.late_minutes}</td>
+              <td class="py-3 px-4 text-center ${r.overtime_minutes > 0 ? 'text-indigo-600 font-bold' : 'text-slate-400'}">${r.overtime_minutes}</td>
+              <td class="py-3 px-4 text-center">${r.half_day ? '<span class="text-amber-600 font-bold">Yes (0.5)</span>' : '<span class="text-slate-300">No</span>'}</td>
+              <td class="py-3 px-4 text-right">
+                <button onclick='openRegularizeModal(${JSON.stringify(r)})' class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 ml-auto">
+                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                  <span>Regularize</span>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+        lucide.createIcons();
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center py-6 text-rose-500">Failed to load attendance logs.</td></tr>';
+      }
+    }
+
+    function openRegularizeModal(record) {
+      selectedRecordForReg = record;
+      document.getElementById('modal-reg-subtitle').innerText = `Editing ${record.emp_code} for ${record.date}`;
+      document.getElementById('modal-reg-status').value = record.status;
+      
+      const inInput = document.getElementById('modal-reg-punchin');
+      const outInput = document.getElementById('modal-reg-punchout');
+
+      inInput.value = record.punch_in ? new Date(record.punch_in).toISOString().slice(0, 16) : '';
+      outInput.value = record.punch_out ? new Date(record.punch_out).toISOString().slice(0, 16) : '';
+
+      // History
+      const histContainer = document.getElementById('modal-reg-history-items');
+      const history = record.history || [];
+      if (!history.length) {
+        histContainer.innerHTML = '<span class="text-slate-400 italic">No manual corrections have been made yet.</span>';
+      } else {
+        histContainer.innerHTML = history.map((h, i) => `
+          <div class="bg-slate-50 p-2 rounded border border-slate-200">
+            <div class="flex justify-between font-semibold text-[11px] text-slate-700">
+              <span>#${i+1} by ${h.by} (${h.reason})</span>
+              <span>${new Date(h.at).toLocaleDateString()}</span>
+            </div>
+            <pre class="text-[10px] text-indigo-700 mt-1">${JSON.stringify(h.changes, null, 2)}</pre>
+          </div>
+        `).join('');
+      }
+
+      document.getElementById('modal-regularize').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    async function submitRegularization() {
+      if (!selectedRecordForReg) return;
+      const status = document.getElementById('modal-reg-status').value;
+      const inVal = document.getElementById('modal-reg-punchin').value;
+      const outVal = document.getElementById('modal-reg-punchout').value;
+      const by = document.getElementById('modal-reg-by').value.trim() || 'hr.admin';
+      const reason = document.getElementById('modal-reg-reason').value.trim();
+
+      if (!reason || reason.length < 5) {
+        showToast('Please provide a reason of at least 5 characters', false);
+        return;
+      }
+
+      const body = {
+        status: status,
+        regularized_by: by,
+        reason: reason
+      };
+      if (inVal && status !== 'ABSENT' && status !== 'LEAVE') {
+        body.punch_in = new Date(inVal).getTime();
+      }
+      if (outVal && status !== 'ABSENT' && status !== 'LEAVE') {
+        body.punch_out = new Date(outVal).getTime();
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/attendance/${selectedRecordForReg.emp_code}/${selectedRecordForReg.date}`, {
+          method: 'PATCH',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast('Attendance record regularized successfully!', true);
+          closeModal('modal-regularize');
+          loadAttendance(1);
+        } else {
+          showToast(data.detail || 'Regularization failed', false);
+        }
+      } catch (err) {
+        showToast('Network error during regularization', false);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Analytics (Department Summary & Leaderboard & Trend)
+    // -------------------------------------------------------------
+    async function loadAnalytics() {
+      const month = document.getElementById('analytics-month').value || '2026-07';
+      const grid = document.getElementById('dept-cards-grid');
+
+      try {
+        const res = await fetch(`${API_BASE}/analytics/departments/summary?month=${month}`);
+        const data = await res.json();
+        const items = data.items || [];
+
+        if (!items.length) {
+          grid.innerHTML = '<div class="col-span-full text-center py-8 text-slate-400">No department summary data for this month.</div>';
+          return;
+        }
+
+        grid.innerHTML = items.map(d => `
+          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-center mb-3">
+                <h4 class="font-bold text-slate-900 text-lg">${d.department}</h4>
+                <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold">Headcount: ${d.headcount}</span>
+              </div>
+              <div class="space-y-2 mt-4 text-xs text-slate-600">
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span>Present Days (Sum):</span>
+                  <span class="font-bold text-slate-900">${d.present_days}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span>Avg Work Hours:</span>
+                  <span class="font-bold text-slate-900">${d.avg_work_hours !== null ? d.avg_work_hours + ' hrs' : 'N/A'}</span>
+                </div>
+                <div class="flex justify-between py-1 border-b border-slate-100">
+                  <span>Late Instances:</span>
+                  <span class="font-bold ${d.late_count > 0 ? 'text-rose-600' : 'text-slate-900'}">${d.late_count} (${d.total_late_minutes} min)</span>
+                </div>
+                <div class="flex justify-between py-1">
+                  <span>Leaves / On-Duty:</span>
+                  <span class="font-bold text-slate-900">${d.leave_count} / ${d.on_duty_count}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (err) {
+        grid.innerHTML = '<div class="col-span-full text-center py-8 text-rose-500">Failed to load department summary.</div>';
+      }
+    }
+
+    async function loadLeaderboard() {
+      const month = document.getElementById('analytics-month').value || '2026-07';
+      const dept = document.getElementById('leaderboard-dept').value;
+      const tbody = document.getElementById('leaderboard-rows');
+
+      let q = `month=${month}&limit=10`;
+      if (dept) q += `&department=${dept}`;
+
+      try {
+        const res = await fetch(`${API_BASE}/analytics/leaderboard/late?${q}`);
+        const data = await res.json();
+        const items = data.items || [];
+
+        if (!items.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-slate-400">No latecomers in this period! 🎉</td></tr>';
+          return;
+        }
+
+        const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
+
+        tbody.innerHTML = items.map(row => `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="py-2.5 px-3 font-bold text-slate-800">
+              ${medalMap[row.rank] || ''} Rank ${row.rank}
+            </td>
+            <td class="py-2.5 px-3">
+              <div class="font-semibold text-slate-900">${row.name}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${row.emp_code}</div>
+            </td>
+            <td class="py-2.5 px-3 text-xs text-slate-600">${row.department}</td>
+            <td class="py-2.5 px-3 text-right font-bold text-rose-600">${row.total_late_minutes} m</td>
+            <td class="py-2.5 px-3 text-right text-slate-700">${row.late_count}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-rose-500">Failed to load leaderboard.</td></tr>';
+      }
+    }
+
+    async function loadTrend() {
+      const dept = document.getElementById('trend-dept').value || 'Engineering';
+      const from = document.getElementById('trend-from').value || '2026-07-06';
+      const to = document.getElementById('trend-to').value || '2026-07-15';
+
+      try {
+        const res = await fetch(`${API_BASE}/analytics/departments/${dept}/trend?from=${from}&to=${to}`);
+        const data = await res.json();
+        const items = data.items || [];
+
+        const labels = items.map(i => i.date.slice(5));
+        const rateValues = items.map(i => i.attendance_rate !== null ? (i.attendance_rate * 100) : null);
+        const movingAvgValues = items.map(i => i.moving_avg_7d !== null ? (i.moving_avg_7d * 100) : null);
+
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        if (trendChartInstance) trendChartInstance.destroy();
+
+        trendChartInstance = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Attendance Rate (%)',
+                data: rateValues,
+                borderColor: '#4f46e5',
+                backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                tension: 0.3,
+                fill: true,
+                pointRadius: 4
+              },
+              {
+                label: '7-Day Moving Avg (%)',
+                data: movingAvgValues,
+                borderColor: '#10b981',
+                borderDash: [5, 5],
+                tension: 0.3,
+                fill: false,
+                pointRadius: 3
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                  callback: val => val + '%'
+                }
+              }
+            },
+            plugins: {
+              legend: { position: 'bottom' }
+            }
+          }
+        });
+      } catch (err) {
+        console.error('Failed to load trend chart', err);
+      }
+    }
+
+    // -------------------------------------------------------------
+    // Explain Inspector
+    // -------------------------------------------------------------
+    async function runExplainQuery() {
+      const endpoint = document.getElementById('explain-endpoint-select').value;
+      const month = document.getElementById('explain-month').value || '2026-07';
+      const container = document.getElementById('explain-results-container');
+      const jsonPre = document.getElementById('explain-json');
+      const badge = document.getElementById('explain-index-badge');
+      const info = document.getElementById('explain-collection-info');
+
+      let url = `${API_BASE}/admin/explain/${endpoint}?month=${month}`;
+      if (endpoint === 'department_trend') {
+        url += `&department=Engineering&from=2026-07-06&to=2026-07-08`;
+      } else if (endpoint === 'employee_monthly') {
+        url += `&emp_code=EMP0001`;
+      }
+
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        container.classList.remove('hidden');
+        info.innerText = `Endpoint: ${data.endpoint} | Collection: ${data.collection}`;
+        jsonPre.innerText = JSON.stringify(data.explain, null, 2);
+
+        // Check if IXSCAN is present
+        const jsonStr = JSON.stringify(data.explain);
+        if (jsonStr.includes('IXSCAN') && !jsonStr.includes('COLLSCAN')) {
+          badge.className = 'px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800';
+          badge.innerText = 'Index Scan Confirmed (IXSCAN - No COLLSCAN)';
+        } else {
+          badge.className = 'px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-100 text-indigo-800';
+          badge.innerText = 'Aggregation Pipeline Explained';
+        }
+      } catch (err) {
+        showToast('Failed to run explain query', false);
+      }
+    }
+
+    // Modal close helper
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
